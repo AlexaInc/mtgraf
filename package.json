@@ -5,6 +5,77 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./composer": {
+      "types": "./dist/composer.d.ts",
+      "import": "./dist/composer.js"
+    },
+    "./context": {
+      "types": "./dist/context.d.ts",
+      "import": "./dist/context.js"
+    },
+    "./telegram": {
+      "types": "./dist/telegram.d.ts",
+      "import": "./dist/telegram.js"
+    },
+    "./telegraf": {
+      "types": "./dist/telegraf.d.ts",
+      "import": "./dist/telegraf.js"
+    },
+    "./markup": {
+      "types": "./dist/markup.d.ts",
+      "import": "./dist/markup.js"
+    },
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "import": "./dist/format.js"
+    },
+    "./input": {
+      "types": "./dist/input.d.ts",
+      "import": "./dist/input.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    },
+    "./filters": {
+      "types": "./dist/filters.d.ts",
+      "import": "./dist/filters.js"
+    },
+    "./router": {
+      "types": "./dist/router.d.ts",
+      "import": "./dist/router.js"
+    },
+    "./scenes": {
+      "types": "./dist/scenes.d.ts",
+      "import": "./dist/scenes.js"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "import": "./dist/session.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "composer": ["dist/composer.d.ts"],
+      "context": ["dist/context.d.ts"],
+      "telegram": ["dist/telegram.d.ts"],
+      "telegraf": ["dist/telegraf.d.ts"],
+      "markup": ["dist/markup.d.ts"],
+      "format": ["dist/format.d.ts"],
+      "input": ["dist/input.d.ts"],
+      "types": ["dist/types.d.ts"],
+      "filters": ["dist/filters.d.ts"],
+      "router": ["dist/router.d.ts"],
+      "scenes": ["dist/scenes.d.ts"],
+      "session": ["dist/session.d.ts"]
+    }
+  },
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build"
@@ -13,11 +84,12 @@
     "dist"
   ],
   "dependencies": {
-    "telegraf": "^4.16.3",
+    "@telegraf/types": "^7.1.0",
     "telegram": "^2.26.22"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "telegraf": "^4.16.3",
     "tslib": "^2.6.4",
     "typescript": "^5.5.4"
   }

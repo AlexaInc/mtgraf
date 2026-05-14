@@ -6,15 +6,30 @@ This document defines the steps required to turn the current GramJS wrapper into
 
 - [x] Local partial wrapper exists for `Telegraf`, `Telegram`, `Context`, and `Composer`
 - [x] Package exports are wired to local `Telegraf` and local compatibility `Input`
-- [ ] Full Telegraf class API is not yet implemented
-- [ ] Full `Context` API is not yet implemented
-- [ ] `Telegram` Bot API adapter is incomplete
-- [ ] `Router`, `Scenes`, `session`, `Markup`, and `Format` compatibility are not yet fully bridged
+- [x] Broad Telegraf class API is implemented for common runtime flows
+- [x] Broad `Context` API is implemented for common message/media/chat flows
+- [x] `Telegram` MTProto adapter covers common send/edit/delete/chat/media operations
+- [x] `Router`, `Scenes`, `session`, `Markup`, `Format`, `Input`, `Types`, and `filters` compatibility shims are exported
+- [x] MTProto-backed local file IDs are implemented for media received through this wrapper
+- [x] Automatic input file resolver handles local MTProto IDs, cached aliases, Buffer, local path, URL, GramJS media, and `{ source, filename }`
+- [x] `Input.file(stream, filename)` is normalized to a GramJS `CustomFile`
+- [x] Persistent MTProto file reference storage is implemented as a best-effort JSON store
+- [x] `session()` supports custom property, async session keys, `defaultSession`, TTL memory store, and `isSessionContext`
 - [ ] Integration tests and project-level compatibility validation are pending
 
 ## Goal
 
 Provide a replacement package that can be used as a drop-in Telegraf backend for existing large projects, with minimal or zero changes to the original codebase.
+
+## File ID policy
+
+- Media received through GramJS is exposed as Telegraf-style objects with `file_id` values beginning with `mtgraf_`.
+- Those local IDs support send/reuse/download through MTProto for photos, documents, videos, audio, voices, animations, stickers, video notes, and media groups while the process still has the media reference in memory.
+- Configure `fileStorePath`, `localFileStorePath`, or `MTGRAF_FILE_STORE` to attempt reuse of `mtgraf_...` references after restart.
+- `telegram.downloadFile(fileId)` works for local `mtgraf_...` IDs without calling `api.telegram.org`.
+- `telegram.getFileLink(fileId)` cannot produce an HTTP URL for local MTProto IDs; use `downloadFile()`.
+- Old opaque Bot API `file_id`s are not reliably usable with pure MTProto. Telegram does not expose a stable official decoder from Bot API `file_id` to MTProto `id/accessHash/fileReference`.
+- HTTP Bot API fallback is disabled by default. It can be enabled only with `allowBotApiFallback: true` or `botApiMode: 'local-bot-api'`, which should point `apiRoot` to a reachable local/self-hosted Bot API server on blocked hosts.
 
 ## Phase 1 — API mapping and package surface
 
@@ -81,6 +96,7 @@ Provide a replacement package that can be used as a drop-in Telegraf backend for
 3. Re-export `Markup`, `Format`, `Input`, and `Types` so existing imports work
 4. Provide compatibility for `Context.tg`, `Context.me`, `Context.msg`, `Context.chat`, and all shorthand accessors
 5. Support plugin-style Telegraf extensions via identical exports and type signatures
+6. Add durable storage for local MTProto file references if file IDs must survive restarts
 
 ## Phase 6 — verification and integration
 
@@ -92,8 +108,9 @@ Provide a replacement package that can be used as a drop-in Telegraf backend for
 ## Immediate next implementation tasks
 
 - [x] Switch exports to local `Context` and `Composer` wrappers
-- [ ] Expand `src/telegraf.ts` to mirror Telegraf class flow and update dispatch
-- [ ] Expand `src/context.ts` with the full Telegraf update getter surface
-- [ ] Expand `src/telegram.ts` to support the wider Bot API method set
-- [ ] Create compatibility stubs for unsupported webhook-related behavior
+- [x] Expand `src/telegraf.ts` to mirror Telegraf class flow and update dispatch for common GramJS events
+- [x] Expand `src/context.ts` with the common Telegraf update getter surface
+- [x] Expand `src/telegram.ts` to support the wider Bot API method set where MTProto can cover it
+- [x] Create compatibility stubs/custom handlers for webhook-related behavior
+- [x] Add persistent local MTProto file ID storage
 - [ ] Add integration test scaffolding and example project validation

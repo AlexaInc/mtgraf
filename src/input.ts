@@ -1,5 +1,5 @@
-export const file = (source: string | Buffer | object) => source;
-export const url = (source: string) => source;
+export const file = (source: string | Buffer | NodeJS.ReadableStream | object, filename?: string) => filename ? { source, filename } : source;
+export const url = (source: string) => ({ url: source });
 export const media = (source: any) => source;
 
 export default {

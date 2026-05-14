@@ -1,16 +1,55 @@
 import { Telegram } from './telegram';
 
+const contextNoChatTelegramMethods = new Set([
+  'getMe',
+  'getFile',
+  'getFileLink',
+  'downloadFile',
+  'getUpdates',
+  'getWebhookInfo',
+  'setWebhook',
+  'deleteWebhook',
+  'answerInlineQuery',
+  'answerCbQuery',
+  'answerCallbackQuery',
+  'answerShippingQuery',
+  'answerPreCheckoutQuery',
+]);
+
 export class Context {
+  [property: string]: any;
   update: any;
   telegram: Telegram;
   botInfo?: any;
   state: Record<string, any> = {};
   match: RegExpExecArray | string[] | null = null;
+  payload = '';
+  args: string[] = [];
 
   constructor(update: any, telegram: Telegram, botInfo?: any) {
     this.update = update;
     this.telegram = telegram;
     this.botInfo = botInfo;
+
+    return new Proxy(this, {
+      get(target, property, receiver) {
+        if (typeof property !== 'string' || property in target) {
+          return Reflect.get(target, property, receiver);
+        }
+
+        const telegramMethod = (target.telegram as any)[property];
+        if (typeof telegramMethod !== 'function') {
+          return undefined;
+        }
+
+        return (...args: any[]) => {
+          if (contextNoChatTelegramMethods.has(property)) {
+            return telegramMethod.apply(target.telegram, args);
+          }
+          return telegramMethod.call(target.telegram, target.requireChatId(property), ...args);
+        };
+      },
+    });
   }
 
   get updateType() {
@@ -31,7 +70,7 @@ export class Context {
   }
 
   get message() {
-    return this.update.message ?? this.update.edited_message ?? undefined;
+    return this.update.message ?? undefined;
   }
 
   get editedMessage() {
@@ -60,6 +99,14 @@ export class Context {
 
   get editedChannelPost() {
     return this.update.edited_channel_post ?? undefined;
+  }
+
+  get messageReaction() {
+    return this.update.message_reaction ?? undefined;
+  }
+
+  get messageReactionCount() {
+    return this.update.message_reaction_count ?? undefined;
   }
 
   get poll() {
@@ -120,9 +167,15 @@ export class Context {
     return (
       this.msg?.from ||
       this.callbackQuery?.from ||
+      this.inlineQuery?.from ||
+      this.chosenInlineResult?.from ||
+      this.shippingQuery?.from ||
+      this.preCheckoutQuery?.from ||
+      this.pollAnswer?.user ||
       this.myChatMember?.from ||
       this.chatMember?.from ||
-      this.chatJoinRequest?.from
+      this.chatJoinRequest?.from ||
+      this.messageReaction?.user
     );
   }
 
@@ -131,32 +184,61 @@ export class Context {
   }
 
   get passportData() {
-    if (!this.message) return undefined;
-    return this.message.passport_data;
+    return this.message?.passport_data;
   }
 
   get webAppData() {
-    const msg = this.message;
-    if (!msg || !('web_app_data' in msg)) return undefined;
-    const { data, button_text } = msg.web_app_data;
+    const data = this.message?.web_app_data;
+    if (!data) return undefined;
     return {
       data: {
-        json: <T>() => JSON.parse(data) as T,
-        text: () => data,
+        json: <T>() => JSON.parse(data.data) as T,
+        text: () => data.data,
       },
-      button_text,
+      button_text: data.button_text,
+    };
+  }
+
+  get webhookReply() {
+    return (this.telegram as any).webhookReply ?? false;
+  }
+
+  set webhookReply(enable: boolean) {
+    (this.telegram as any).webhookReply = enable;
+  }
+
+  get reactions() {
+    const oldReaction = this.messageReaction?.old_reaction ?? [];
+    const newReaction = this.messageReaction?.new_reaction ?? [];
+    return {
+      old: oldReaction,
+      new: newReaction,
+      added: newReaction.filter((item: any) => !oldReaction.includes(item)),
+      removed: oldReaction.filter((item: any) => !newReaction.includes(item)),
+      has: (reaction: any) => {
+        const value = typeof reaction === 'string' ? reaction : reaction?.emoji ?? reaction?.custom_emoji_id;
+        return newReaction.some((item: any) => item === reaction || item?.emoji === value || item?.custom_emoji_id === value);
+      },
     };
   }
 
   get text() {
-    return this.msg?.text ?? this.msg?.caption;
+    return this.msg?.text ?? this.msg?.message ?? this.msg?.caption;
+  }
+
+  entities(...types: string[]) {
+    const text = this.text ?? '';
+    const all = [...(this.msg?.entities ?? []), ...(this.msg?.caption_entities ?? [])];
+    const allowed = new Set(types);
+    return all
+      .filter((entity: any) => !types.length || allowed.has(entity.type))
+      .map((entity: any) => ({ ...entity, fragment: text.slice(entity.offset, entity.offset + entity.length) }));
   }
 
   has(filters: string | Array<string> | ((update: any) => boolean)) {
     if (typeof filters === 'function') {
       return filters(this.update);
     }
-
     const list = Array.isArray(filters) ? filters : [filters];
     return list.some((filter) => filter in this.update);
   }
@@ -171,68 +253,233 @@ export class Context {
     return this.chat?.id ?? this.msg?.peerId?.userId ?? this.msg?.peerId?.chatId ?? this.msg?.peerId?.channelId;
   }
 
+  private requireChatId(method: string) {
+    const chatId = this.chatId;
+    this.assert(chatId, method);
+    return chatId;
+  }
+
+  private requireFromId(method: string) {
+    const fromId = this.from?.id;
+    this.assert(fromId, method);
+    return fromId;
+  }
+
+  sendMessage(text: string, extra: Record<string, any> = {}) {
+    return this.telegram.sendMessage(this.requireChatId('sendMessage'), text, extra);
+  }
+
   reply(text: string, extra: Record<string, any> = {}) {
-    return this.telegram.sendMessage(this.chatId, text, { ...(extra as any), reply_to_message_id: this.msgId } as any);
+    return this.telegram.sendMessage(this.requireChatId('reply'), text, { ...(extra as any), reply_to_message_id: this.msgId } as any);
   }
 
   replyWithMarkdown(text: string, extra: Record<string, any> = {}) {
     return this.reply(text, { ...extra, parse_mode: 'Markdown' });
   }
 
+  replyWithMarkdownV2(text: string, extra: Record<string, any> = {}) {
+    return this.reply(text, { ...extra, parse_mode: 'MarkdownV2' });
+  }
+
   replyWithHTML(text: string, extra: Record<string, any> = {}) {
     return this.reply(text, { ...extra, parse_mode: 'HTML' });
   }
 
+  sendPhoto(photo: any, extra: Record<string, any> = {}) {
+    return this.telegram.sendPhoto(this.requireChatId('sendPhoto'), photo, extra);
+  }
+
   replyWithPhoto(photo: any, extra: Record<string, any> = {}) {
-    return this.telegram.sendPhoto(this.chatId, photo, extra);
+    return this.sendPhoto(photo, extra);
+  }
+
+  sendDocument(document: any, extra: Record<string, any> = {}) {
+    return this.telegram.sendDocument(this.requireChatId('sendDocument'), document, extra);
   }
 
   replyWithDocument(document: any, extra: Record<string, any> = {}) {
-    return this.telegram.sendDocument(this.chatId, document, extra);
+    return this.sendDocument(document, extra);
+  }
+
+  sendVideo(video: any, extra: Record<string, any> = {}) {
+    return this.telegram.sendVideo(this.requireChatId('sendVideo'), video, extra);
   }
 
   replyWithVideo(video: any, extra: Record<string, any> = {}) {
-    return this.telegram.sendVideo(this.chatId, video, extra);
+    return this.sendVideo(video, extra);
+  }
+
+  sendAudio(audio: any, extra: Record<string, any> = {}) {
+    return this.telegram.sendAudio(this.requireChatId('sendAudio'), audio, extra);
   }
 
   replyWithAudio(audio: any, extra: Record<string, any> = {}) {
-    return this.telegram.sendAudio(this.chatId, audio, extra);
+    return this.sendAudio(audio, extra);
+  }
+
+  sendSticker(sticker: any, extra: Record<string, any> = {}) {
+    return this.telegram.sendSticker(this.requireChatId('sendSticker'), sticker, extra);
   }
 
   replyWithSticker(sticker: any, extra: Record<string, any> = {}) {
-    return this.telegram.sendSticker(this.chatId, sticker, extra);
+    return this.sendSticker(sticker, extra);
+  }
+
+  sendAnimation(animation: any, extra: Record<string, any> = {}) {
+    return this.telegram.sendAnimation(this.requireChatId('sendAnimation'), animation, extra);
   }
 
   replyWithAnimation(animation: any, extra: Record<string, any> = {}) {
-    return this.telegram.sendAnimation(this.chatId, animation, extra);
+    return this.sendAnimation(animation, extra);
+  }
+
+  sendVoice(voice: any, extra: Record<string, any> = {}) {
+    return this.telegram.sendVoice(this.requireChatId('sendVoice'), voice, extra);
   }
 
   replyWithVoice(voice: any, extra: Record<string, any> = {}) {
-    return this.telegram.sendVoice(this.chatId, voice, extra);
+    return this.sendVoice(voice, extra);
+  }
+
+  sendVideoNote(videoNote: any, extra: Record<string, any> = {}) {
+    return (this.telegram as any).sendVideoNote(this.requireChatId('sendVideoNote'), videoNote, extra);
+  }
+
+  replyWithVideoNote(videoNote: any, extra: Record<string, any> = {}) {
+    return this.sendVideoNote(videoNote, extra);
+  }
+
+  sendMediaGroup(media: any[], extra: Record<string, any> = {}) {
+    return this.telegram.sendMediaGroup(this.requireChatId('sendMediaGroup'), media, extra);
   }
 
   replyWithMediaGroup(media: any[], extra: Record<string, any> = {}) {
-    return this.telegram.sendMediaGroup(this.chatId, media, extra);
+    return this.sendMediaGroup(media, extra);
+  }
+
+  sendLocation(latitude: number, longitude: number, extra: Record<string, any> = {}) {
+    return this.telegram.sendLocation(this.requireChatId('sendLocation'), latitude, longitude, extra);
   }
 
   replyWithLocation(latitude: number, longitude: number, extra: Record<string, any> = {}) {
-    return this.telegram.sendLocation(this.chatId, latitude, longitude, extra);
+    return this.sendLocation(latitude, longitude, extra);
+  }
+
+  sendVenue(latitude: number, longitude: number, title: string, address: string, extra: Record<string, any> = {}) {
+    return this.telegram.sendVenue(this.requireChatId('sendVenue'), latitude, longitude, title, address, extra);
   }
 
   replyWithVenue(latitude: number, longitude: number, title: string, address: string, extra: Record<string, any> = {}) {
-    return this.telegram.sendVenue(this.chatId, latitude, longitude, title, address, extra);
+    return this.sendVenue(latitude, longitude, title, address, extra);
+  }
+
+  sendContact(phoneNumber: string, firstName: string, extra: Record<string, any> = {}) {
+    return this.telegram.sendContact(this.requireChatId('sendContact'), phoneNumber, firstName, extra);
   }
 
   replyWithContact(phoneNumber: string, firstName: string, lastName?: string, extra: Record<string, any> = {}) {
-    return this.telegram.sendContact(this.chatId, phoneNumber, firstName, { ...(extra as any), last_name: lastName } as any);
+    return this.sendContact(phoneNumber, firstName, { ...(extra as any), last_name: lastName } as any);
+  }
+
+  sendDice(extra: Record<string, any> = {}) {
+    return this.telegram.sendDice(this.requireChatId('sendDice'), extra);
   }
 
   replyWithDice(extra: Record<string, any> = {}) {
-    return this.telegram.sendDice(this.chatId, extra);
+    return this.sendDice(extra);
+  }
+
+  sendChatAction(action: string, extra: Record<string, any> = {}) {
+    return this.telegram.sendChatAction(this.requireChatId('sendChatAction'), action as any, extra);
+  }
+
+  replyWithChatAction(action: string, extra: Record<string, any> = {}) {
+    return this.sendChatAction(action, extra);
+  }
+
+  replyWithPoll(question: string, options: readonly string[], extra: Record<string, any> = {}) {
+    return (this.telegram as any).sendPoll(this.requireChatId('replyWithPoll'), question, options, extra);
+  }
+
+  replyWithQuiz(question: string, options: readonly string[], extra: Record<string, any> = {}) {
+    return (this.telegram as any).sendQuiz(this.requireChatId('replyWithQuiz'), question, options, extra);
+  }
+
+  sendInvoice(invoice: any, extra: Record<string, any> = {}) {
+    return (this.telegram as any).sendInvoice(this.requireChatId('sendInvoice'), invoice, extra);
+  }
+
+  replyWithInvoice(invoice: any, extra: Record<string, any> = {}) {
+    return this.sendInvoice(invoice, extra);
+  }
+
+  replyWithGame(gameName: string, extra: Record<string, any> = {}) {
+    return (this.telegram as any).sendGame(this.requireChatId('replyWithGame'), gameName, extra);
+  }
+
+  answerInlineQuery(results: readonly any[], extra: Record<string, any> = {}) {
+    return (this.telegram as any).answerInlineQuery(this.inlineQuery?.id, results, extra);
   }
 
   answerCbQuery(text?: string, extra: Record<string, any> = {}) {
-    return this.telegram.answerCbQuery(this.callbackQuery?.id, text, extra);
+    return (this.telegram as any).answerCbQuery(this.callbackQuery?.id, text, extra);
+  }
+
+  answerGameQuery(text?: string, extra: Record<string, any> = {}) {
+    return this.answerCbQuery(text, extra);
+  }
+
+  answerShippingQuery(ok: boolean, shippingOptions?: readonly any[], errorMessage?: string) {
+    return (this.telegram as any).answerShippingQuery(this.shippingQuery?.id, ok, shippingOptions, errorMessage);
+  }
+
+  answerPreCheckoutQuery(ok: boolean, errorMessage?: string) {
+    return (this.telegram as any).answerPreCheckoutQuery(this.preCheckoutQuery?.id, ok, errorMessage);
+  }
+
+  getUserChatBoosts() {
+    return (this.telegram as any).getUserChatBoosts(this.requireChatId('getUserChatBoosts'), this.requireFromId('getUserChatBoosts'));
+  }
+
+  getChat(...args: any[]) {
+    return (this.telegram.getChat as any)(this.requireChatId('getChat'), ...args);
+  }
+
+  getChatAdministrators(...args: any[]) {
+    return (this.telegram.getChatAdministrators as any)(this.requireChatId('getChatAdministrators'), ...args);
+  }
+
+  getChatMember(userId?: number) {
+    return this.telegram.getChatMember(this.requireChatId('getChatMember'), userId ?? this.requireFromId('getChatMember'));
+  }
+
+  getChatMembersCount() {
+    return (this.telegram as any).getChatMembersCount(this.requireChatId('getChatMembersCount'));
+  }
+
+  leaveChat() {
+    return (this.telegram as any).leaveChat(this.requireChatId('leaveChat'));
+  }
+
+  pinChatMessage(messageId = this.msgId, extra: Record<string, any> = {}) {
+    this.assert(messageId, 'pinChatMessage');
+    return (this.telegram as any).pinChatMessage(this.requireChatId('pinChatMessage'), messageId, extra);
+  }
+
+  unpinChatMessage(messageId = this.msgId) {
+    return (this.telegram as any).unpinChatMessage(this.requireChatId('unpinChatMessage'), messageId);
+  }
+
+  unpinAllChatMessages() {
+    return (this.telegram as any).unpinAllChatMessages(this.requireChatId('unpinAllChatMessages'));
+  }
+
+  react(reaction?: any | any[], isBig?: boolean) {
+    this.assert(this.msgId, 'react');
+    const reactions = reaction === undefined ? undefined : (Array.isArray(reaction) ? reaction : [reaction]).map((item) =>
+      typeof item === 'string' ? { type: 'emoji', emoji: item } : item
+    );
+    return (this.telegram as any).setMessageReaction(this.requireChatId('react'), this.msgId, reactions, isBig);
   }
 
   deleteMessage(messageId?: number) {
@@ -240,7 +487,7 @@ export class Context {
     if (id === undefined) {
       throw new Error('Message id is required to delete a message');
     }
-    return this.telegram.deleteMessage(this.chatId, id);
+    return this.telegram.deleteMessage(this.requireChatId('deleteMessage'), id);
   }
 
   forwardMessage(chatId: any, fromChatId: any, messageId: number, extra: Record<string, any> = {}) {
@@ -267,11 +514,35 @@ export class Context {
     return this.telegram.editMessageCaption(this.chatId, messageId, undefined, caption, extra);
   }
 
-  editMessageReplyMarkup(extra: Record<string, any> = {}) {
+  editMessageMedia(media: any, extra: Record<string, any> = {}) {
+    const messageId = this.msgId;
+    if (messageId === undefined) {
+      throw new Error('Message id is required to edit message media');
+    }
+    return (this.telegram as any).editMessageMedia(this.chatId, messageId, undefined, media, extra);
+  }
+
+  editMessageReplyMarkup(markup: any = undefined) {
     const messageId = this.msgId;
     if (messageId === undefined) {
       throw new Error('Message id is required to edit message reply markup');
     }
-    return this.telegram.editMessageReplyMarkup(this.chatId, messageId, undefined, extra as any);
+    return this.telegram.editMessageReplyMarkup(this.chatId, messageId, undefined, markup as any);
+  }
+
+  editMessageLiveLocation(latitude: number, longitude: number, extra: Record<string, any> = {}) {
+    const messageId = this.msgId;
+    if (messageId === undefined) {
+      throw new Error('Message id is required to edit live location');
+    }
+    return (this.telegram as any).editMessageLiveLocation(this.chatId, messageId, undefined, latitude, longitude, extra);
+  }
+
+  stopMessageLiveLocation(markup?: any) {
+    const messageId = this.msgId;
+    if (messageId === undefined) {
+      throw new Error('Message id is required to stop live location');
+    }
+    return (this.telegram as any).stopMessageLiveLocation(this.chatId, messageId, undefined, markup);
   }
 }

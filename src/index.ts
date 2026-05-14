@@ -1,19 +1,18 @@
 export { Telegraf } from './telegraf';
-export { Telegram } from './telegram';
+export { Telegram, TelegramError, configureLocalFileStore, registerLocalFileAlias } from './telegram';
 export { Context } from './context';
 export { Composer } from './composer';
-export { Middleware, MiddlewareFn, MiddlewareObj } from 'telegraf';
-export { Router } from 'telegraf';
-export { TelegramError } from 'telegraf';
+export type { Middleware, MiddlewareFn, MiddlewareObj } from './composer';
 
-export * as Types from 'telegraf/types';
-export * as Markup from 'telegraf/markup';
-export * as Format from 'telegraf/format';
+export { Router } from './router';
+export * as Types from './types';
+export * as Markup from './markup';
+export * as Format from './format';
 export * as Input from './input';
+export * as Scenes from './scenes';
+export * as filters from './filters';
 
-export { deunionize } from 'telegraf';
-export { session, MemorySessionStore, SessionStore } from 'telegraf';
-
-export * as Scenes from 'telegraf/scenes';
+export { deunionize } from './types';
+export { session, MemorySessionStore, isSessionContext, type SessionStore, type SyncSessionStore, type AsyncSessionStore, type SessionContext } from './session';
 
 export { Telegraf as default } from './telegraf';

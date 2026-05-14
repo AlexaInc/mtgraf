@@ -1,15 +1,20 @@
 import { Composer } from './composer';
 import { Context } from './context';
+import { Api } from 'telegram';
 import { NewMessage } from 'telegram/events';
 import { EditedMessage } from 'telegram/events/EditedMessage';
 import { CallbackQuery } from 'telegram/events/CallbackQuery';
-import { Telegram } from './telegram';
+import { registerLocalFile, Telegram } from './telegram';
 
 export interface TelegrafOptions {
   apiId?: number;
   apiHash?: string;
   session?: string;
   connectionRetries?: number;
+  allowBotApiFallback?: boolean;
+  botApiMode?: 'mtproto' | 'local-bot-api';
+  fileStorePath?: string;
+  localFileStorePath?: string;
   telegram?: Record<string, any>;
 }
 
@@ -48,6 +53,121 @@ function convertChat(peer: any) {
   return { id: chatId, type };
 }
 
+function toNumber(value: any) {
+  return value?.toJSNumber?.() ?? value;
+}
+
+function getAttribute(document: any, className: string) {
+  const ctor = (Api as any)[className];
+  return document?.attributes?.find?.((attribute: any) =>
+    (typeof ctor === 'function' && attribute instanceof ctor) || attribute?.className === className
+  );
+}
+
+function getFileName(document: any) {
+  return getAttribute(document, 'DocumentAttributeFilename')?.fileName;
+}
+
+function classifyDocumentMedia(media: any): { kind: 'document' | 'video' | 'audio' | 'voice' | 'animation' | 'sticker' | 'video_note'; field: string; value: Record<string, any> } {
+  const document = media.document;
+  const fileName = getFileName(document);
+  const audio = getAttribute(document, 'DocumentAttributeAudio');
+  const video = getAttribute(document, 'DocumentAttributeVideo');
+  const sticker = getAttribute(document, 'DocumentAttributeSticker');
+  const animated = getAttribute(document, 'DocumentAttributeAnimated');
+  const size = toNumber(document?.size);
+  const base = {
+    mime_type: document?.mimeType,
+    file_name: fileName,
+    file_size: size,
+  };
+
+  if (sticker) {
+    return {
+      kind: 'sticker',
+      field: 'sticker',
+      value: {
+        emoji: sticker.alt,
+        set_name: sticker.stickerset?.shortName,
+        width: video?.w,
+        height: video?.h,
+        is_animated: Boolean(animated),
+        is_video: Boolean(video),
+        ...base,
+      },
+    };
+  }
+
+  if (video?.roundMessage) {
+    return {
+      kind: 'video_note',
+      field: 'video_note',
+      value: {
+        length: video.w,
+        duration: video.duration,
+        file_size: size,
+      },
+    };
+  }
+
+  if (animated || document?.mimeType === 'image/gif') {
+    return {
+      kind: 'animation',
+      field: 'animation',
+      value: {
+        width: video?.w,
+        height: video?.h,
+        duration: video?.duration,
+        ...base,
+      },
+    };
+  }
+
+  if (video) {
+    return {
+      kind: 'video',
+      field: 'video',
+      value: {
+        width: video.w,
+        height: video.h,
+        duration: video.duration,
+        ...base,
+      },
+    };
+  }
+
+  if (audio?.voice) {
+    return {
+      kind: 'voice',
+      field: 'voice',
+      value: {
+        duration: audio.duration,
+        mime_type: document?.mimeType,
+        file_size: size,
+      },
+    };
+  }
+
+  if (audio) {
+    return {
+      kind: 'audio',
+      field: 'audio',
+      value: {
+        duration: audio.duration,
+        performer: audio.performer,
+        title: audio.title,
+        ...base,
+      },
+    };
+  }
+
+  return {
+    kind: 'document',
+    field: 'document',
+    value: base,
+  };
+}
+
 function convertMessage(message: any) {
   if (!message) return undefined;
 
@@ -65,12 +185,61 @@ function convertMessage(message: any) {
 
   if (message.media) {
     const media = message.media;
-    if (media.photo) result.photo = media.photo;
-    if (media.document) result.document = media.document;
-    if (media.video) result.video = media.video;
-    if (media.audio) result.audio = media.audio;
-    if (media.voice) result.voice = media.voice;
-    if (media.animation) result.animation = media.animation;
+    if (media.photo) {
+      const ref = registerLocalFile('photo', media);
+      result.photo = [{
+        file_id: ref.id,
+        file_unique_id: ref.uniqueId,
+        file_size: ref.size,
+      }];
+      result._mtgraf_media = media;
+    }
+    if (media.document) {
+      const documentMedia = classifyDocumentMedia(media);
+      const ref = registerLocalFile(documentMedia.kind, media, toNumber(media.document.size));
+      result[documentMedia.field] = {
+        file_id: ref.id,
+        file_unique_id: ref.uniqueId,
+        ...documentMedia.value,
+      };
+      result._mtgraf_media = media;
+    }
+    if (media.video) {
+      const ref = registerLocalFile('video', media);
+      result.video = {
+        file_id: ref.id,
+        file_unique_id: ref.uniqueId,
+        file_size: media.video.size?.toJSNumber?.() ?? media.video.size,
+      };
+      result._mtgraf_media = media;
+    }
+    if (media.audio) {
+      const ref = registerLocalFile('audio', media);
+      result.audio = {
+        file_id: ref.id,
+        file_unique_id: ref.uniqueId,
+        file_size: media.audio.size?.toJSNumber?.() ?? media.audio.size,
+      };
+      result._mtgraf_media = media;
+    }
+    if (media.voice) {
+      const ref = registerLocalFile('voice', media);
+      result.voice = {
+        file_id: ref.id,
+        file_unique_id: ref.uniqueId,
+        file_size: media.voice.size?.toJSNumber?.() ?? media.voice.size,
+      };
+      result._mtgraf_media = media;
+    }
+    if (media.animation) {
+      const ref = registerLocalFile('animation', media);
+      result.animation = {
+        file_id: ref.id,
+        file_unique_id: ref.uniqueId,
+        file_size: media.animation.size?.toJSNumber?.() ?? media.animation.size,
+      };
+      result._mtgraf_media = media;
+    }
     if (media.geoPoint) result.location = {
       latitude: media.geoPoint.lat,
       longitude: media.geoPoint.long,
@@ -131,6 +300,7 @@ function convertCallbackQuery(event: any, message: any) {
 export class Telegraf<C extends Context = Context> extends Composer<C> {
   public telegram: Telegram;
   public botInfo: unknown;
+  public context: Partial<C> = {};
   private running = false;
   private readonly token: string;
 
@@ -141,7 +311,7 @@ export class Telegraf<C extends Context = Context> extends Composer<C> {
     }
 
     this.token = token;
-    this.telegram = new Telegram(token, options);
+    this.telegram = new Telegram(token, { ...options.telegram, ...options });
   }
 
   private handleError: (err: unknown, ctx: C) => Promise<void> | void = async (err: unknown, ctx: C) => {
@@ -185,12 +355,43 @@ export class Telegraf<C extends Context = Context> extends Composer<C> {
     return this;
   }
 
-  webhookCallback(path = '/', opts: { secretToken?: string } = {}) {
-    throw new Error('webhookCallback is not supported with the GramJS Telegraf backend');
+  get webhookReply() {
+    return (this.telegram as any).webhookReply;
   }
 
-  createWebhook(opts: { domain: string; path?: string } & Record<string, any>) {
-    throw new Error('createWebhook is not supported with the GramJS Telegraf backend');
+  set webhookReply(enable: boolean) {
+    (this.telegram as any).webhookReply = enable;
+  }
+
+  webhookCallback(path = '/', opts: { secretToken?: string } = {}) {
+    return async (req: any, res: any, next?: () => void) => {
+      if (req.url && path !== '/' && !req.url.startsWith(path)) {
+        next?.();
+        return;
+      }
+
+      if (opts.secretToken && req.headers?.['x-telegram-bot-api-secret-token'] !== opts.secretToken) {
+        res.statusCode = 403;
+        res.end?.();
+        return;
+      }
+
+      const update = req.body;
+      if (!update) {
+        res.statusCode = 400;
+        res.end?.();
+        return;
+      }
+
+      await this.handleUpdate(update as any);
+      res.statusCode = 200;
+      res.end?.('OK');
+    };
+  }
+
+  async createWebhook(opts: { domain: string; path?: string; secretToken?: string } & Record<string, any>) {
+    await this.telegram.setWebhook(`${opts.domain}${opts.path ?? '/'}`, opts as any);
+    return this.webhookCallback(opts.path ?? '/', { secretToken: opts.secretToken });
   }
 
   private registerEventHandlers() {
@@ -216,12 +417,17 @@ export class Telegraf<C extends Context = Context> extends Composer<C> {
     await this.dispatch({ callback_query: callbackQuery });
   }
 
+  async handleUpdate(update: GramJsUpdate) {
+    await this.dispatch(update);
+  }
+
   private async dispatch(update: GramJsUpdate) {
     if (!update) {
       return;
     }
 
     const ctx = new Context(update as any, this.telegram as any, this.botInfo as any) as C;
+    Object.assign(ctx, this.context);
     const middleware = this.middleware();
     try {
       await middleware(ctx, async () => Promise.resolve());
