@@ -33,26 +33,6 @@ jobs:
           mkdir -p release
           tar -czf release/mtgraf-${GITHUB_REF_NAME:-build}.tar.gz dist
 
-      - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          body: "Built release for ${{ github.ref_name }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload release asset
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: release/mtgraf-${{ github.ref_name }}.tar.gz
-          asset_name: mtgraf-${{ github.ref_name }}.tar.gz
-          asset_content_type: application/gzip
-
       - name: Publish to npm
         if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         run: |
