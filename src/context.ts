@@ -1,3 +1,7 @@
+// Author: AlexaInc
+// Package: mtgraf
+// Copyright (c) 2026 AlexaInc
+
 import { Telegram } from './telegram';
 
 const contextNoChatTelegramMethods = new Set([

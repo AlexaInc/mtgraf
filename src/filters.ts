@@ -1,3 +1,7 @@
+// Author: AlexaInc
+// Package: mtgraf
+// Copyright (c) 2026 AlexaInc
+
 type Update = Record<string, any>;
 
 function hasPath(value: any, path: string[]) {

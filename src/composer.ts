@@ -1,3 +1,7 @@
+// Author: AlexaInc
+// Package: mtgraf
+// Copyright (c) 2026 AlexaInc
+
 export type Middleware<Context = any> = (ctx: Context, next: () => Promise<void>) => Promise<any> | any;
 export type MiddlewareFn<Context = any> = Middleware<Context>;
 export interface MiddlewareObj<Context = any> {

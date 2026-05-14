@@ -1,5 +1,5 @@
 {
-  "name": "telegraf-gramjs",
+  "name": "mtgraf",
   "version": "0.1.0",
   "description": "A Telegraf-compatible wrapper for gramjs, exposing Telegraf-style functions and context shortcuts.",
   "main": "dist/index.js",
@@ -62,18 +62,42 @@
   },
   "typesVersions": {
     "*": {
-      "composer": ["dist/composer.d.ts"],
-      "context": ["dist/context.d.ts"],
-      "telegram": ["dist/telegram.d.ts"],
-      "telegraf": ["dist/telegraf.d.ts"],
-      "markup": ["dist/markup.d.ts"],
-      "format": ["dist/format.d.ts"],
-      "input": ["dist/input.d.ts"],
-      "types": ["dist/types.d.ts"],
-      "filters": ["dist/filters.d.ts"],
-      "router": ["dist/router.d.ts"],
-      "scenes": ["dist/scenes.d.ts"],
-      "session": ["dist/session.d.ts"]
+      "composer": [
+        "dist/composer.d.ts"
+      ],
+      "context": [
+        "dist/context.d.ts"
+      ],
+      "telegram": [
+        "dist/telegram.d.ts"
+      ],
+      "telegraf": [
+        "dist/telegraf.d.ts"
+      ],
+      "markup": [
+        "dist/markup.d.ts"
+      ],
+      "format": [
+        "dist/format.d.ts"
+      ],
+      "input": [
+        "dist/input.d.ts"
+      ],
+      "types": [
+        "dist/types.d.ts"
+      ],
+      "filters": [
+        "dist/filters.d.ts"
+      ],
+      "router": [
+        "dist/router.d.ts"
+      ],
+      "scenes": [
+        "dist/scenes.d.ts"
+      ],
+      "session": [
+        "dist/session.d.ts"
+      ]
     }
   },
   "scripts": {
@@ -92,5 +116,11 @@
     "telegraf": "^4.16.3",
     "tslib": "^2.6.4",
     "typescript": "^5.5.4"
+  },
+  "author": "AlexaInc",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlexaInc/mtgraf.git"
   }
 }

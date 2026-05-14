@@ -1,3 +1,7 @@
+// Author: AlexaInc
+// Package: mtgraf
+// Copyright (c) 2026 AlexaInc
+
 import { Composer } from './composer';
 import { Context } from './context';
 import { Api } from 'telegram';

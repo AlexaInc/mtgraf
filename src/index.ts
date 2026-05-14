@@ -1,3 +1,7 @@
+// Author: AlexaInc
+// Package: mtgraf
+// Copyright (c) 2026 AlexaInc
+
 export { Telegraf } from './telegraf';
 export { Telegram, TelegramError, configureLocalFileStore, registerLocalFileAlias } from './telegram';
 export { Context } from './context';

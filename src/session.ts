@@ -1,3 +1,7 @@
+// Author: AlexaInc
+// Package: mtgraf
+// Copyright (c) 2026 AlexaInc
+
 import type { Middleware } from './composer';
 
 type MaybePromise<T> = T | Promise<T>;

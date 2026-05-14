@@ -1,3 +1,7 @@
+// Author: AlexaInc
+// Package: mtgraf
+// Copyright (c) 2026 AlexaInc
+
 type Button = string | Record<string, any>;
 type MarkupResult = {
   reply_markup: Record<string, any>;

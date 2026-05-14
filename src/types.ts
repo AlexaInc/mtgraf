@@ -1,3 +1,7 @@
+// Author: AlexaInc
+// Package: mtgraf
+// Copyright (c) 2026 AlexaInc
+
 export * from '@telegraf/types';
 
 export type Update = Record<string, any>;

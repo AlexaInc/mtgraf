@@ -1,3 +1,7 @@
+// Author: AlexaInc
+// Package: mtgraf
+// Copyright (c) 2026 AlexaInc
+
 //This file is part of MTGraf, an MTProto-based Telegram bot framework for Node.js.
 //Copyright (c) 2026-present, Alexainc and MTGraf contributors
 //
